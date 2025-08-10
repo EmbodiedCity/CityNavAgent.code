@@ -552,9 +552,6 @@ def CityNavAgent(scene_id, split, data_dir="./data", max_step_size=200, vlm_name
         predict_routes.append(data_dict)
 
         if record:
-            with open(os.path.join('./data/mem_graphs', f'{env_id}.pkl'), 'rb') as f:
-                total_mem_G = pickle.load(f)
-
             for pr in predict_routes:
                 final_traj = []
                 final_traj.extend(pr['pred_traj_explore'])
@@ -563,13 +560,8 @@ def CityNavAgent(scene_id, split, data_dir="./data", max_step_size=200, vlm_name
                 if len(mem_traj) == 0:
                     continue
 
-                for ii in range(1, len(mem_traj)):
-                    mid_path, mid_nodes = compute_shortest_path(total_mem_G, mem_traj[ii-1], mem_traj[ii])
-                    for jj in range(0, len(mid_path)):
-                        start_coord = final_traj[-1]
-                        tar_coord = mid_path[jj][:3]
-                        sz, mid_coords = calculate_movement_steps(start_coord, tar_coord)
-                        final_traj.extend(mid_coords)
+                _, mid_coords = calculate_movement_steps_mem(mem_act_graph, mem_traj)
+                final_traj.extend(mid_coords)
 
                 pr.update({'final_pred_traj': final_traj})
             with open(f'output/output_data_{env_id}.json', 'w') as f:
