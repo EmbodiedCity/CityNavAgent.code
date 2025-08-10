@@ -10,6 +10,7 @@ import math
 import numpy as np
 
 from src.common.param import args
+from maps import compute_shortest_path
 
 
 def to_eularian_angles(xyzw):
@@ -274,6 +275,21 @@ def calculate_movement_steps(A, B, h_ss=5.0, v_ss=2.0, yaw_ss=15):
     # print(len(path))
 
     return len(path), path
+
+
+def calculate_movement_steps_mem(mem_g, mem_traj, h_ss=5.0, v_ss=2.0, y_ss=15):
+    step_size = 0.0
+    action_traj = []
+    for ii in range(1, len(mem_traj)):
+        mid_path, mid_nodes = compute_shortest_path(mem_g, mem_traj[ii - 1], mem_traj[ii])
+        for jj in range(1, len(mid_path)):
+            start_coord = mid_path[jj-1][:3]
+            tar_coord = mid_path[jj][:3]
+            sz, mid_coords = calculate_movement_steps(start_coord, tar_coord, h_ss, v_ss, y_ss)
+            action_traj.extend(mid_coords)
+            step_size += sz
+
+    return step_size, action_traj
 
 
 def append_text_to_image(image: np.ndarray, text: str):

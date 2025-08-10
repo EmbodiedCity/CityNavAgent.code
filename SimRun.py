@@ -20,7 +20,7 @@ from airsim_plugin.airsim_settings import ObservationDirections
 from utils.env_utils import getPoseAfterMakeActions, get_pano_observations, get_front_observations
 from utils.maps import build_semantic_map, visualize_semantic_point_cloud, update_camera_pose,\
     convert_global_pc, statistical_filter, find_closest_node, compute_shortest_path
-from utils.utils import calculate_movement_steps, append_text_to_image
+from utils.utils import calculate_movement_steps, calculate_movement_steps_mem, append_text_to_image
 
 from external.Grounded_Sam_Lite.groundingdino.util.inference import load_model, predict
 from external.Grounded_Sam_Lite.grounded_sam_api import GroundedSam
@@ -324,6 +324,8 @@ def explore_pipeline_by_sam(
 def CityNavAgent(scene_id, split, data_dir="./data", max_step_size=200, vlm_name="dino", record=False):
     data_root = os.path.join(data_dir, f"gt_by_env/{env_id}/{split}_landmk.json")
     graph_root = os.path.join(data_dir, f"mem_graphs_pruned/{env_id}/{split}")
+    graph_act_root = os.path.join(data_dir, f'mem_graphs/{env_id}.pkl')
+
     os.makedirs("obs_imgs", exist_ok=True)
 
     predict_routes = []
@@ -375,6 +377,8 @@ def CityNavAgent(scene_id, split, data_dir="./data", max_step_size=200, vlm_name
         print(f"================================ Start episode {episode_id} ==================================")
         # load graph
         mem_graph = NavigationGraph(os.path.join(graph_root, f"{episode_id}.pkl"))
+        with open(graph_act_root, 'rb') as f:
+            mem_act_graph = pickle.load(f)
 
         landmarks = navi_task["instruction"]["landmarks"]
         if len(landmarks) == 0:
@@ -469,13 +473,17 @@ def CityNavAgent(scene_id, split, data_dir="./data", max_step_size=200, vlm_name
                 # evaluate
                 walk = [a[0] for a in result["walk"]]
 
-                rest_steps = int(min(max_step_size-step_size, len(walk)))
-                rest_walks = walk[:rest_steps]
+                node_traj = [mem_graph.get_node_data(node)["position"].tolist() for node in walk]
+                sz, action_traj = calculate_movement_steps_mem(mem_act_graph, node_traj)
 
-                data_dict['pred_traj'].extend([mem_graph.get_node_data(node)["position"].tolist() for node in rest_walks])
-                data_dict['pred_traj_memory'].extend([mem_graph.get_node_data(node)["position"].tolist() for node in rest_walks])
+                rest_steps = int(min(max_step_size-step_size, sz))
 
-                stop_pos = mem_graph.get_node_data(rest_walks[-1])["position"]
+                rest_walks = action_traj[:rest_steps]
+
+                data_dict['pred_traj'].extend(rest_walks)
+                data_dict['pred_traj_memory'].extend(rest_walks)
+
+                stop_pos = rest_walks[-1][:3]
                 curr_pose = convert_airsim_pose(list(stop_pos) + list(curr_pose.orientation))
                 tool.setPoses([[curr_pose]])
 
